@@ -299,7 +299,7 @@ with tab2:
 st.markdown("---")
 
 # ---------------- CONSULTA PUNTUAL ----------------
-st.subheader("🔍 Consultar un mes puntual")
+st.subheader(" Consultar un mes puntual")
 
 forecast_df_show = forecast_df.copy()
 forecast_df_show["PeriodoYM_str"] = forecast_df_show["PeriodoYM"].dt.strftime("%Y-%m")
@@ -313,5 +313,5 @@ if opcion:
     fila = forecast_df_show.loc[forecast_df_show["PeriodoYM_str"] == opcion].iloc[0]
     valor = fila["Precio_Pronosticado"]
     st.write(
-        f"👉 Pronóstico para **{opcion}**: **{valor:,.0f} ARS/tn (constantes)**"
+        f" Pronóstico para **{opcion}**: **{valor:,.0f} ARS/tn (constantes)**"
     )
