@@ -1,5 +1,5 @@
 # =============================================================
-# app.py - Consola interactiva de precios de trigo (AR)
+# app.py - Consola interactiva de precios de trigo (Argentina)
 # Modelo híbrido: ARIMA (parte temporal) + XGBoost (corrección)
 # =============================================================
 
@@ -13,7 +13,6 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from xgboost import XGBRegressor
 
 import streamlit as st
-
 from pandas.tseries.offsets import MonthBegin
 
 BASE = Path(".")
@@ -254,88 +253,17 @@ def entrenar_modelo():
         "data_hist": data_hist,
         "forecast_base": forecast_base_df,
         "metrics": metrics,
-        "res_arima": res_arima,
         "xgb": xgb,
-        "df_model": df_model,
         "feature_cols": feature_cols,
-        "log_arima_future_base": log_arima_future_base,
-        "future_dates": future_dates,
     }
-
-
-# ---------------------------------------------------------
-# FUNCIÓN: Generar pronóstico para un escenario
-# (ajustes % en USD y Futuros Chicago)
-# ---------------------------------------------------------
-def generar_escenario(
-    log_arima_future_base,
-    future_dates,
-    xgb,
-    df_model,
-    feature_cols,
-    usd_delta_pct=0.0,
-    fut_delta_pct=0.0,
-):
-    last_row = df_model.iloc[-1]
-    res_lags = [last_row[f"resid_lag{lag}"] for lag in range(1, 7)]
-    future_resids = []
-
-    # Ajustes en log: log(P * k) = log(P) + log(k)
-    log_fut_adj = last_row["log_fut"] + np.log(1 + fut_delta_pct / 100)
-    log_usd_adj = last_row["log_usd"] + np.log(1 + usd_delta_pct / 100)
-
-    for step, fecha in enumerate(future_dates, start=1):
-        mes = fecha.month
-
-        feat = {
-            "log_fut": log_fut_adj,
-            "log_usd": log_usd_adj,
-            "t": last_row["t"] + step,
-        }
-
-        for i, val in enumerate(res_lags, start=1):
-            feat[f"resid_lag{i}"] = val
-
-        for c in [c for c in df_model.columns if c.startswith("Mes_")]:
-            feat[c] = 0
-        if f"Mes_{mes}" in feat:
-            feat[f"Mes_{mes}"] = 1
-
-        X_fut = pd.DataFrame([feat])[feature_cols]
-        pred_res = xgb.predict(X_fut)[0]
-        future_resids.append(pred_res)
-
-        res_lags = [pred_res] + res_lags[:-1]
-
-    log_resid_future = pd.Series(future_resids, index=future_dates)
-    log_precio_future = log_arima_future_base + log_resid_future
-    precio_future = np.exp(log_precio_future)
-
-    esc_df = pd.DataFrame(
-        {
-            "PeriodoYM": future_dates,
-            "Precio_Pronosticado": precio_future.values,
-        }
-    )
-    return esc_df
 
 
 # =============================================================
 # INTERFAZ STREAMLIT
 # =============================================================
-st.set_page_config(page_title="Precio trigo AR - Consola interactiva", layout="wide")
-
-# CSS para fondo negro
-st.markdown(
-    """
-<style>
-.stApp {
-    background-color: #050505;
-    color: #F5F5F5;
-}
-</style>
-""",
-    unsafe_allow_html=True,
+st.set_page_config(
+    page_title="Precio trigo AR - Consola interactiva",
+    layout="wide"
 )
 
 st.title("🌾 Consola interactiva de precios de trigo (Argentina)")
@@ -362,12 +290,8 @@ with st.spinner("Entrenando modelo y calculando escenario base..."):
 data_hist = res["data_hist"]
 forecast_base = res["forecast_base"]
 metrics = res["metrics"]
-res_arima = res["res_arima"]
 xgb_model = res["xgb"]
-df_model = res["df_model"]
 feature_cols = res["feature_cols"]
-log_arima_future_base = res["log_arima_future_base"]
-future_dates = res["future_dates"]
 
 # =============================================================
 # KPIs
@@ -399,14 +323,11 @@ with tab1:
     hist_tail = data_hist.tail(36)
 
     fig, ax = plt.subplots(figsize=(10, 4))
-    fig.patch.set_facecolor("#050505")
-    ax.set_facecolor("#050505")
-
     ax.plot(
         hist_tail["PeriodoYM"],
         hist_tail["Precio_Hoy"],
         label="Histórico",
-        color="#5EDFFF",
+        color="#1f77b4",
     )
     ax.plot(
         forecast_base["PeriodoYM"],
@@ -414,15 +335,11 @@ with tab1:
         marker="o",
         linestyle="--",
         label="Pronóstico base (12 meses)",
-        color="#00FF88",
+        color="#2ca02c",
     )
-    ax.legend(facecolor="#050505")
+    ax.legend()
     ax.set_ylabel("Precio (ARS constantes)")
-    ax.tick_params(axis="x", rotation=45, colors="#F5F5F5")
-    ax.tick_params(axis="y", colors="#F5F5F5")
-    for spine in ax.spines.values():
-        spine.set_color("#888888")
-    ax.title.set_color("#F5F5F5")
+    ax.tick_params(axis="x", rotation=45)
     st.pyplot(fig)
 
     st.subheader("Tabla de pronóstico (escenario base)")
@@ -456,6 +373,13 @@ with tab1:
 # ---------------- TAB 2: ESCENARIOS INTERACTIVOS ----------------
 with tab2:
     st.subheader("Escenarios interactivos: Dólar y Chicago")
+    st.markdown(
+        """
+Estos escenarios NO recalculan todo el modelo desde cero, sino que aplican
+un **ajuste multiplicativo** sobre el pronóstico base, asumiendo que cambios
+en dólar y Chicago se trasladan parcialmente al precio interno.
+"""
+    )
 
     colA, colB = st.columns(2)
     with colA:
@@ -500,79 +424,61 @@ with tab2:
             key="fut_B",
         )
 
-    esc_A = generar_escenario(
-        log_arima_future_base,
-        future_dates,
-        xgb_model,
-        df_model,
-        feature_cols,
-        usd_delta_pct=usd_A,
-        fut_delta_pct=fut_A,
-    )
-    esc_B = generar_escenario(
-        log_arima_future_base,
-        future_dates,
-        xgb_model,
-        df_model,
-        feature_cols,
-        usd_delta_pct=usd_B,
-        fut_delta_pct=fut_B,
-    )
+    # Sensibilidades asumidas (puedes ajustarlas)
+    alpha_usd = 0.5  # 50% del cambio del dólar se traslada al precio
+    alpha_fut = 0.3  # 30% del cambio de Chicago se traslada al precio
+
+    factor_A = 1 + (alpha_usd * usd_A + alpha_fut * fut_A) / 100
+    factor_B = 1 + (alpha_usd * usd_B + alpha_fut * fut_B) / 100
+
+    esc_A = forecast_base.copy()
+    esc_B = forecast_base.copy()
+    esc_A["Precio_Pronosticado"] = esc_A["Precio_Pronosticado"] * factor_A
+    esc_B["Precio_Pronosticado"] = esc_B["Precio_Pronosticado"] * factor_B
 
     # Gráfico comparación
     fig2, ax2 = plt.subplots(figsize=(10, 4))
-    fig2.patch.set_facecolor("#050505")
-    ax2.set_facecolor("#050505")
 
-    # histórico
     hist_tail = data_hist.tail(36)
     ax2.plot(
         hist_tail["PeriodoYM"],
         hist_tail["Precio_Hoy"],
         label="Histórico",
-        color="#5EDFFF",
+        color="#1f77b4",
     )
 
-    # base
     ax2.plot(
         forecast_base["PeriodoYM"],
         forecast_base["Precio_Pronosticado"],
         linestyle="--",
         label="Base",
-        color="#888888",
+        color="#7f7f7f",
     )
 
-    # escenario A
     ax2.plot(
         esc_A["PeriodoYM"],
         esc_A["Precio_Pronosticado"],
         marker="o",
         linestyle="-",
         label=f"Escenario A (USD {usd_A:+}%, Chicago {fut_A:+}%)",
-        color="#00FF88",
+        color="#2ca02c",
     )
 
-    # escenario B
     ax2.plot(
         esc_B["PeriodoYM"],
         esc_B["Precio_Pronosticado"],
         marker="s",
         linestyle="-.",
         label=f"Escenario B (USD {usd_B:+}%, Chicago {fut_B:+}%)",
-        color="#FFB347",
+        color="#ff7f0e",
     )
 
-    ax2.legend(facecolor="#050505")
+    ax2.legend()
     ax2.set_ylabel("Precio (ARS constantes)")
-    ax2.tick_params(axis="x", rotation=45, colors="#F5F5F5")
-    ax2.tick_params(axis="y", colors="#F5F5F5")
-    for spine in ax2.spines.values():
-        spine.set_color("#888888")
-    ax2.title.set_color("#F5F5F5")
+    ax2.tick_params(axis="x", rotation=45)
     st.pyplot(fig2)
 
-    # Elección de escenario para descargar
-    st.subheader("⬇️ Descargar escenario")
+    st.subheader("⬇️ Descargar escenarios")
 
     esc_opcion = st.selectbox(
         "¿Qué escenario querés descargar?",
@@ -629,16 +535,8 @@ with tab3:
     imp_series = pd.Series(importances, index=feature_cols).sort_values(ascending=True)
 
     fig3, ax3 = plt.subplots(figsize=(8, 6))
-    fig3.patch.set_facecolor("#050505")
-    ax3.set_facecolor("#050505")
-
-    imp_series.tail(12).plot(kind="barh", ax=ax3, color="#00FF88")
+    imp_series.tail(12).plot(kind="barh", ax=ax3, color="#2ca02c")
     ax3.set_xlabel("Importancia relativa")
-    ax3.tick_params(axis="x", colors="#F5F5F5")
-    ax3.tick_params(axis="y", colors="#F5F5F5")
-    for spine in ax3.spines.values():
-        spine.set_color("#888888")
-    ax3.title.set_color("#F5F5F5")
     st.pyplot(fig3)
 
     with st.expander("📌 Variables utilizadas (explicado simple)"):
