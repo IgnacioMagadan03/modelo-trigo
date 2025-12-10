@@ -266,23 +266,8 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🌾 Consola interactiva de precios de trigo (Argentina)")
+st.title("🌾Precios de trigo Argentina🌾")
 st.caption(
-    "Modelo híbrido: ARIMA (tendencia y memoria) + XGBoost (corrección con dólar, Chicago y estacionalidad)"
-)
-
-with st.expander("📌 ¿Qué hace este modelo? (explicado simple)"):
-    st.markdown(
-        """
-- Primero uso un modelo de series de tiempo (ARIMA) que aprende **cómo se viene moviendo el precio en el tiempo**.
-- Después tomo el **error de ese modelo** y lo corrijo con otro modelo (XGBoost) que mira:
-  - el **futuro del trigo en Chicago**,
-  - el **tipo de cambio USD/ARS**,
-  - el **mes del año** (estacionalidad),
-  - y la **memoria de shocks recientes**.
-- El resultado final es un pronóstico que combina historia del precio + condiciones de mercado.
-"""
-    )
 
 with st.spinner("Entrenando modelo y calculando escenario base..."):
     res = entrenar_modelo()
@@ -360,14 +345,14 @@ with tab1:
         mime="text/csv",
     )
 
-    st.subheader("🔍 Consultar un mes puntual (escenario base)")
+    st.subheader("Consultar un mes puntual")
     opciones = forecast_base_show["PeriodoYM"].tolist()
     mes_sel = st.selectbox("Elegí un mes", opciones, key="mes_base")
     if mes_sel:
         valor = forecast_base_show.loc[
             forecast_base_show["PeriodoYM"] == mes_sel, "Precio_Pronosticado"
         ].iloc[0]
-        st.write(f"👉 Pronóstico para **{mes_sel}**: **{valor:,.0f} ARS/tn**")
+        st.write(f"Pronóstico para **{mes_sel}**: **{valor:,.0f} ARS/tn**")
 
 
 # ---------------- TAB 2: ESCENARIOS INTERACTIVOS ----------------
@@ -539,7 +524,7 @@ with tab3:
     ax3.set_xlabel("Importancia relativa")
     st.pyplot(fig3)
 
-    with st.expander("📌 Variables utilizadas (explicado simple)"):
+    with st.expander("Variables utilizadas (explicado simple)"):
         st.markdown(
             """
 **Variables del mercado y del modelo:**
