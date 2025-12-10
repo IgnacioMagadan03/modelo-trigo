@@ -267,7 +267,6 @@ st.set_page_config(
 )
 
 st.title("🌾Precios de trigo Argentina🌾")
-st.caption(
 
 with st.spinner("Entrenando modelo y calculando escenario base..."):
     res = entrenar_modelo()
